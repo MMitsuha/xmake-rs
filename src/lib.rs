@@ -42,8 +42,8 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 
 // The version of xmake that is required for this crate to work.
-// https://github.com/xmake-io/xmake/releases/tag/v2.9.6
-const XMAKE_MINIMUM_VERSION: Version = Version::new(2, 9, 6);
+// https://github.com/xmake-io/xmake/releases/tag/v3.0.0
+const XMAKE_MINIMUM_VERSION: Version = Version::new(3, 0, 0);
 
 /// Represents the different kinds of linkage for a library.
 ///
@@ -254,7 +254,6 @@ struct ConfigCache {
     build_info: BuildInfo,
     plat: Option<String>,
     arch: Option<String>,
-    xmake_version: Option<Version>,
     env: HashMap<String, Option<String>>,
 }
 
@@ -490,7 +489,7 @@ impl Config {
             .clone()
             .unwrap_or_else(|| PathBuf::from(getenv_unwrap("OUT_DIR")));
 
-        cmd.arg(format!("--buildir={}", dst.display()));
+        cmd.arg(format!("--builddir={}", dst.display()));
 
         // Cross compilation
         let host = getenv_unwrap("HOST");
@@ -795,14 +794,6 @@ impl Config {
         let target_arch = self.getenv_os("CARGO_CFG_TARGET_ARCH").unwrap();
         let plat = self.get_xmake_plat();
 
-        // From v2.9.9 (not released) onwards, XMake used arm64 instead of arm64-v8a
-        let arm64_changes = self
-            .cache
-            .xmake_version
-            .as_ref()
-            .unwrap_or(&XMAKE_MINIMUM_VERSION)
-            < &Version::new(2, 9, 9);
-
         let arch = match (plat.as_str(), target_arch.as_str()) {
             ("android", a) if os == "androideabi" => match a {
                 "arm" => "armeabi", // TODO Check with cc-rs if it's true
@@ -812,8 +803,6 @@ impl Config {
             ("android", "aarch64") => "arm64-v8a",
             ("android", "i686") => "x86",
             ("linux", "loongarch64") => "loong64",
-            // From v2.9.9 (not released) onwards, XMake used arm64 instead of arm64-v8a
-            ("linux", "aarch64") if arm64_changes => "arm64-v8a",
             ("watchos", "arm64_32") => "armv7k",
             ("watchos", "armv7k") => "armv7k",
             ("iphoneos", "aarch64") => "arm64",
@@ -913,7 +902,6 @@ impl Config {
                 version, XMAKE_MINIMUM_VERSION
             );
         }
-        self.cache.xmake_version = Some(version);
     }
 
     fn xmake_command(&mut self) -> XmakeCommand {

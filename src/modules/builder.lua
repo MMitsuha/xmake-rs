@@ -18,7 +18,14 @@ import("core.base.hashset")
 import("core.project.config")
 import("core.platform.platform")
 
--- source: https://github.com/xmake-io/xmake/blob/master/xmake/core/tool/builder.lua
+-- This file vendors the link-item collection and ordering logic from xmake's
+-- core/tool/builder.lua. It cannot be imported directly: core.tool.builder is
+-- a core-internal module that relies on the global `require`, which is not
+-- available in the xmake script sandbox.
+--
+-- Keep the algorithm in sync with upstream; tests/link-order and
+-- tests/link-groups lock the behavior xmake-rs depends on.
+-- Last reviewed against xmake v3.1.2 (21f084ae6).
 
 -- builder: get the extra configuration from value
 function _extraconf(extras, value)
@@ -174,8 +181,32 @@ function _sort_links_of_items(items, opt)
                     local extra = _extraconf(extras, value)
                     local key = extra and extra.name or tostring(value)
                     table.insert(links, "linkgroup::" .. key)
-                    linkgroups_map[key] = value
                     extras_map[key] = extras
+                    local oldvalue = linkgroups_map[key]
+                    if oldvalue == nil then
+                        linkgroups_map[key] = value
+                    else
+                        -- merge linkgroups if multiple groups have same group name
+                        -- @see https://github.com/xmake-io/xmake/issues/5806
+                        local oldvalue_wrap_unlock = table.clone(oldvalue)
+                        table.wrap_unlock(oldvalue_wrap_unlock)
+                        local value_wrap_unlock = table.clone(value)
+                        table.wrap_unlock(value_wrap_unlock)
+                        local newvalue = table.join(oldvalue_wrap_unlock, value_wrap_unlock)
+                        table.wrap_lock(newvalue)
+                        linkgroups_map[key] = newvalue
+
+                        -- merge linkgroups extras
+                        local extra_merged = {}
+                        local group_name = extra.name
+                        for k, v in pairs(extras) do
+                            if v.name == group_name then
+                                table.join2(extra_merged, v)
+                            end
+                        end
+                        local newgroup_name = table.concat(newvalue, "_")
+                        extras[newgroup_name] = extra_merged
+                    end
                 end
             end
         end

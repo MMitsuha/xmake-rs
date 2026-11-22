@@ -27,6 +27,8 @@ members = [
     "tests/shared",
     "tests/static",
     "tests/phony",
+    "tests/link-order",
+    "tests/link-groups",
     "tests/packages/sht-shf-shb",
     "tests/packages/stt-shf-shb",
     "tests/packages/stt-stf-stb",

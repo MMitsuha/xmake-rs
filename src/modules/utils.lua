@@ -34,23 +34,9 @@ import("core.base.hashset")
 import("core.cache.memcache")
 import("core.project.project")
 
--- import("rules.c++.modules.stlheaders", {rootdir = os.programdir()})
-
--- The PR #6338(https://github.com/xmake-io/xmake/pull/6338) changed the location and name of stl_headers
--- import and with try and test if was imported correctly.
--- TODO: In xmake-rs v0.4 I will force on xmake v3 so this patch can removed.
-local stl_headers
-try {
-    function ()
-        stl_headers = import("rules.c++.modules.modules_support.stl_headers", {rootdir = os.programdir()})
-    end,
-    catch
-    {
-        function (errors)
-            stl_headers = import("rules.c++.modules.stlheaders", {rootdir = os.programdir()})
-        end
-    }
-}
+-- xmake-rs v0.4+ requires xmake v3, where the stl headers module lives at
+-- rules/c++/modules/stlheaders.lua.
+local stl_headers = import("rules.c++.modules.stlheaders", {rootdir = os.programdir()})
 assert(stl_headers, "stl_headers is nil")
 
 function _hashset_join(self, ...)
@@ -62,29 +48,12 @@ function _hashset_join(self, ...)
     return self
 end
 
--- source: https://github.com/xmake-io/xmake/blob/dev/xmake/rules/c%2B%2B/modules/modules_support/compiler_support.lua
+-- source: https://github.com/xmake-io/xmake/blob/dev/xmake/rules/c%2B%2B/modules/support.lua
 function _compiler_support(target)
     local memcache = memcache.cache("compiler_support")
     local cachekey = tostring(target)
     local compiler_support = memcache:get2("compiler_support", cachekey)
-    if compiler_support == nil and xmake.version():lt("3.0.0") then
-        local rootdir = path.join(os.programdir(), "rules", "c++", "modules", "modules_support")
-        if target:has_tool("cxx", "clang", "clangxx") then
-            compiler_support = import("clang.compiler_support", {anonymous = true, rootdir = rootdir})
-        elseif target:has_tool("cxx", "gcc", "gxx") then
-            compiler_support = import("gcc.compiler_support", {anonymous = true, rootdir = rootdir})
-        elseif target:has_tool("cxx", "cl") then
-            compiler_support = import("msvc.compiler_support", {anonymous = true, rootdir = rootdir})
-        else
-            local _, toolname = target:tool("cxx")
-            raise("compiler(%s): does not support c++ module!", toolname)
-        end
-
-        memcache:set2("compiler_support", cachekey, compiler_support)
-    end
-
-    -- TODO Remove in xmake-rs v0.4 
-    if compiler_support == nil and xmake.version():ge("3.0.0") then
+    if compiler_support == nil then
         local rootdir = path.join(os.programdir(), "rules", "c++", "modules")
         if target:has_tool("cxx", "clang", "clangxx") then
             compiler_support = import("clang.support", {anonymous = true, rootdir = rootdir})
@@ -96,7 +65,7 @@ function _compiler_support(target)
             local _, toolname = target:tool("cxx")
             raise("compiler(%s): does not support c++ module!", toolname)
         end
-      
+
         memcache:set2("compiler_support", cachekey, compiler_support)
     end
 
@@ -288,17 +257,9 @@ function get_from_target(target, name, scope)
     return table.wrap(result)
 end
 
--- get the the true target name with namespace
+-- get the true target name with namespace
 function get_namespace_target(target)
-    -- TODO With xmake v3 replace by target:fullname()
-    if (not is_namespace_supported()) and (target:namespace() ~= nil) then
-        raise("target(%s):  target is in a namespace, but xmake is neither in v3 nor the compatibility.version policy was set.", name)
-    end
-    local name = target:name()
-    if is_namespace_supported() and target:namespace() then
-        name = target:namespace() .. "::" .. name
-    end
-    return name
+    return target:fullname()
 end
 
 --- check if the given target uses the C++ standard library (STL) based on the provided include directories.
@@ -308,15 +269,14 @@ function is_stl_used(target, includes, opt)
     local stl_includedirs = _compiler_support(target).toolchain_includedirs(target)
     local std_used = false
 
-    -- TODO
-    local is_stl_header = stl_headers.is_stl_header or stl_headers.is_stlheader
+    local is_stlheader = stl_headers.is_stlheader
 
     for _, include in ipairs(includes) do
         for _, stl_includedir in ipairs(stl_includedirs) do
             local file = path.relative(include, stl_includedir)
 
             local includedirs_check = opt.strict and include:startswith(stl_includedir) or true
-            if includedirs_check and is_stl_header(file) then
+            if includedirs_check and is_stlheader(file) then
                 std_used = true
             end
         end
@@ -327,14 +287,4 @@ function is_stl_used(target, includes, opt)
     end
 
     return std_used
-end
-
--- check if namespace are supported
-function is_namespace_supported()
-    local is_supported = _g.is_namespace_supported
-    if is_supported == nil then
-        is_supported = xmake.version():ge("3.0.0") or (xmake.version():satisfies(">=2.9.8 <3.0.0") and (project.policy("compatibility.version") == "3.0"))
-        _g.is_namespace_supported = is_supported
-    end
-    return is_supported
 end
