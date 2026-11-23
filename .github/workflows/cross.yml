@@ -27,7 +27,10 @@ jobs:
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
         with:
-          xmake-version: branch@dev
+          # Pin to the release the vendored modules were synced against.
+          # branch@dev builds xmake from source, which fails on the
+          # windows-2025-vs2026 image (pdcurses slk.c warning treated as error).
+          xmake-version: '3.1.2'
 
       - name: Install Rust target
         run: rustup target add ${{ matrix.target }}
